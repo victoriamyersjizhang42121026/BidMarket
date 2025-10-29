@@ -14,6 +14,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  ImageIcon,
 } from 'lucide-react';
 import { useAuction } from '@/hooks/useAuction';
 import { BidDialog } from './BidDialog';
@@ -29,6 +30,9 @@ export function AuctionStatus() {
     revealFinalized,
     bidderCount,
     winner,
+    itemName,
+    itemDescription,
+    itemImageUrl,
     endAuction,
     isPending,
     isConfirming,
@@ -110,6 +114,46 @@ export function AuctionStatus() {
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {/* Auction Item */}
+          {(itemName || itemImageUrl) && (
+            <>
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Item Image */}
+                {itemImageUrl ? (
+                  <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-border">
+                    <img
+                      src={itemImageUrl}
+                      alt={itemName || 'Auction item'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?w=800&h=600&fit=crop';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="relative aspect-[4/3] rounded-lg overflow-hidden border border-border bg-muted flex items-center justify-center">
+                    <ImageIcon className="w-16 h-16 text-muted-foreground" />
+                  </div>
+                )}
+
+                {/* Item Details */}
+                <div className="space-y-4">
+                  {itemName && (
+                    <div>
+                      <h3 className="text-2xl font-bold text-foreground mb-2">{itemName}</h3>
+                      {itemDescription && (
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          {itemDescription}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
           {/* Time Remaining */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="space-y-2">

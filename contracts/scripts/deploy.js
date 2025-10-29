@@ -12,8 +12,22 @@ async function main() {
   // Deploy ShieldedAuction with 7 days bidding time
   console.log("Deploying ShieldedAuction...");
   const biddingTime = 7 * 24 * 60 * 60; // 7 days in seconds
+
+  // Auction item details
+  const itemName = "Rare Digital Artwork - 'Genesis'";
+  const itemDescription = "A unique digital masterpiece from renowned artist. First piece in the exclusive Genesis collection, featuring cryptographic authenticity.";
+  const itemImageUrl = "https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?w=800&h=600&fit=crop";
+
+  console.log("Auction Item:", itemName);
+  console.log("Description:", itemDescription);
+
   const ShieldedAuction = await hre.ethers.getContractFactory("ShieldedAuction");
-  const auction = await ShieldedAuction.deploy(biddingTime);
+  const auction = await ShieldedAuction.deploy(
+    biddingTime,
+    itemName,
+    itemDescription,
+    itemImageUrl
+  );
   await auction.waitForDeployment();
   const auctionAddress = await auction.getAddress();
   console.log("✅ ShieldedAuction deployed to:", auctionAddress);
@@ -29,7 +43,12 @@ async function main() {
     deployer: deployer.address,
     timestamp: new Date().toISOString(),
     biddingEnd: Number(biddingEnd),
-    biddingEndDate: endDate.toISOString()
+    biddingEndDate: endDate.toISOString(),
+    item: {
+      name: itemName,
+      description: itemDescription,
+      imageUrl: itemImageUrl
+    }
   };
 
   const deploymentsDir = path.join(__dirname, "../deployments");

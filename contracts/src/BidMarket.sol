@@ -12,6 +12,11 @@ contract ShieldedAuction is SepoliaConfig {
     address public immutable seller;
     uint256 public immutable biddingEnd;
 
+    // Auction item details (stored in plaintext)
+    string public itemName;
+    string public itemDescription;
+    string public itemImageUrl;
+
     bool public ended;
     bool public revealPending;
     bool public revealFinalized;
@@ -42,9 +47,18 @@ contract ShieldedAuction is SepoliaConfig {
     event AuctionClosed(uint256 revealRequestId);
     event WinnerRevealed(address indexed bidder, uint64 amount);
 
-    constructor(uint256 biddingTime) {
+    constructor(
+        uint256 biddingTime,
+        string memory _itemName,
+        string memory _itemDescription,
+        string memory _itemImageUrl
+    ) {
         seller = msg.sender;
         biddingEnd = block.timestamp + biddingTime;
+
+        itemName = _itemName;
+        itemDescription = _itemDescription;
+        itemImageUrl = _itemImageUrl;
 
         _highestBid = FHE.asEuint64(0);
         _winnerIndexEnc = FHE.asEuint64(0);

@@ -52,6 +52,25 @@ export function useAuction() {
     },
   });
 
+  // Read auction item details
+  const { data: itemName } = useReadContract({
+    address: CONTRACTS.ShieldedAuction,
+    abi: ABIS.ShieldedAuction,
+    functionName: 'itemName',
+  });
+
+  const { data: itemDescription } = useReadContract({
+    address: CONTRACTS.ShieldedAuction,
+    abi: ABIS.ShieldedAuction,
+    functionName: 'itemDescription',
+  });
+
+  const { data: itemImageUrl } = useReadContract({
+    address: CONTRACTS.ShieldedAuction,
+    abi: ABIS.ShieldedAuction,
+    functionName: 'itemImageUrl',
+  });
+
   // Submit bid
   const submitBid = async (encryptedAmount: `0x${string}`, proof: `0x${string}`) => {
     return writeContract({
@@ -80,6 +99,11 @@ export function useAuction() {
     revealFinalized,
     bidderCount: bidderCount ? Number(bidderCount) : 0,
     winner: winner as [string, bigint] | undefined,
+
+    // Item details
+    itemName: itemName as string | undefined,
+    itemDescription: itemDescription as string | undefined,
+    itemImageUrl: itemImageUrl as string | undefined,
 
     // Actions
     submitBid,
