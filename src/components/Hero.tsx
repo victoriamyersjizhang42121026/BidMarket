@@ -1,5 +1,6 @@
 import { Lock, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import heroBg from "@/assets/hero-bg.jpg";
 
 const Hero = () => {
@@ -55,14 +56,15 @@ const Hero = () => {
               <TrendingUp className="w-5 h-5" />
               Start Bidding
             </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="w-full sm:w-auto"
-              onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              Learn More
-            </Button>
+            <Link to="/how-it-works">
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full sm:w-auto"
+              >
+                Learn More
+              </Button>
+            </Link>
           </div>
 
           {/* Stats */}
