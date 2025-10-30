@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
+import { parseEther } from 'viem';
 import {
   Dialog,
   DialogContent,
@@ -24,13 +25,74 @@ interface BidDialogProps {
 
 export function BidDialog({ open, onOpenChange }: BidDialogProps) {
   const { address } = useAccount();
-  const { submitBid, isPending, isConfirming } = useAuction();
+  const { submitBid, isPending, isConfirming, isConfirmed, hash } = useAuction();
   const { toast } = useToast();
   const [bidAmount, setBidAmount] = useState('');
   const [isEncrypting, setIsEncrypting] = useState(false);
+  const [submittedBidAmount, setSubmittedBidAmount] = useState('');
+
+  // Monitor transaction confirmation
+  useEffect(() => {
+    if (isConfirmed && hash && submittedBidAmount) {
+      console.log('[Bid] Transaction confirmed:', hash);
+
+      const explorerUrl = `https://sepolia.etherscan.io/tx/${hash}`;
+
+      toast({
+        title: '✅ Bid submitted successfully!',
+        description: (
+          <div className="space-y-2">
+            <p>Your encrypted bid of {submittedBidAmount} ETH has been confirmed on-chain.</p>
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline text-sm font-medium flex items-center gap-1"
+            >
+              View on Etherscan →
+            </a>
+          </div>
+        ),
+        duration: 10000, // Show for 10 seconds
+      });
+
+      // Reset form and close dialog
+      setBidAmount('');
+      setSubmittedBidAmount('');
+      onOpenChange(false);
+    }
+  }, [isConfirmed, hash, submittedBidAmount, toast, onOpenChange]);
+
+  // Show transaction pending notification
+  useEffect(() => {
+    if (hash && isPending) {
+      console.log('[Bid] Transaction pending:', hash);
+
+      const explorerUrl = `https://sepolia.etherscan.io/tx/${hash}`;
+
+      toast({
+        title: '⏳ Transaction pending...',
+        description: (
+          <div className="space-y-2">
+            <p>Your bid transaction is being confirmed.</p>
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline text-sm font-medium flex items-center gap-1"
+            >
+              View on Etherscan →
+            </a>
+          </div>
+        ),
+        duration: 5000,
+      });
+    }
+  }, [hash, isPending, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
 
     if (!address) {
       toast({
@@ -57,16 +119,25 @@ export function BidDialog({ open, onOpenChange }: BidDialogProps) {
         description: 'Please wait while we encrypt your bid using FHE',
       });
 
+      console.log('[Bid] Starting encryption process...');
+
       // Initialize FHE
       await initializeFHE();
 
-      // Encrypt the bid amount
+      console.log('[Bid] FHE initialized, encrypting amount:', bidAmount);
+
+      // Convert ETH to Wei (must be an integer for BigInt)
+      const bidInWei = parseEther(bidAmount);
+      console.log('[Bid] Bid in Wei:', bidInWei.toString());
+
+      // Encrypt the bid amount (in Wei)
       const { handle, proof } = await encryptUint64(
-        Number(bidAmount),
+        Number(bidInWei),
         CONTRACTS.ShieldedAuction,
         address
       );
 
+      console.log('[Bid] Encryption complete:', { handle, proof });
       setIsEncrypting(false);
 
       toast({
@@ -74,18 +145,18 @@ export function BidDialog({ open, onOpenChange }: BidDialogProps) {
         description: 'Submitting your encrypted bid to the blockchain...',
       });
 
+      console.log('[Bid] Calling submitBid...');
+
+      // Save the bid amount before submitting (so we can show it in confirmation toast)
+      setSubmittedBidAmount(bidAmount);
+
       // Submit the encrypted bid
       await submitBid(handle as `0x${string}`, proof as `0x${string}`);
 
-      toast({
-        title: 'Bid submitted successfully!',
-        description: `Your encrypted bid of ${bidAmount} ETH has been submitted`,
-      });
-
-      setBidAmount('');
-      onOpenChange(false);
+      // Note: Don't show success toast here, we'll show it when transaction is confirmed
+      console.log('[Bid] Transaction submitted, waiting for confirmation...');
     } catch (error) {
-      console.error('Bid submission failed:', error);
+      console.error('[Bid] Submission failed:', error);
       setIsEncrypting(false);
       toast({
         title: 'Bid submission failed',

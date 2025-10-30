@@ -8,11 +8,9 @@ import {
   Users,
   CheckCircle2,
   Circle,
-  PlayCircle,
   Rocket,
   Target,
   Sparkles,
-  Eye,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -36,36 +34,6 @@ const HowItWorksPage = () => {
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Understanding the complete auction flow with Fully Homomorphic Encryption
             </p>
-          </div>
-        </section>
-
-        {/* Demo Video Section */}
-        <section className="py-12 px-4 bg-muted/30">
-          <div className="container mx-auto max-w-5xl">
-            <Card className="border-primary/20">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-2xl">
-                  <PlayCircle className="w-6 h-6 text-primary" />
-                  Live Demo Video
-                </CardTitle>
-                <CardDescription>
-                  Watch the complete auction flow from bidding to winner reveal
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="w-full aspect-video bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg flex items-center justify-center border-2 border-primary/20">
-                  <div className="text-center space-y-4">
-                    <Eye className="w-20 h-20 text-primary/40 mx-auto" />
-                    <div>
-                      <p className="text-xl font-semibold text-foreground mb-2">Demo Video Coming Soon</p>
-                      <p className="text-muted-foreground">
-                        Complete walkthrough of the ShieldedAuction platform
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </section>
 

@@ -1,4 +1,3 @@
-import { Shield } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Link, useLocation } from "react-router-dom";
 
@@ -12,7 +11,7 @@ const Header = () => {
           <Link to="/" className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-secondary p-[2px]">
               <div className="flex items-center justify-center w-full h-full bg-background rounded-lg">
-                <Shield className="w-5 h-5 text-primary" />
+                <img src="/favicon.svg" alt="BidMarket" className="w-5 h-5" />
               </div>
             </div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">

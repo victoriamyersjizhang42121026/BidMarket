@@ -51,3 +51,4 @@ typechain-types/
 *.tsbuildinfo
 .cache/
 bun.lockb
+.vercel
