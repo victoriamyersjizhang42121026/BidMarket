@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { parseEther } from 'viem';
 import {
@@ -16,7 +16,14 @@ import { Loader2, Lock, Shield } from 'lucide-react';
 import { useAuction } from '@/hooks/useAuction';
 import { encryptUint64, initializeFHE } from '@/lib/fhe';
 import { CONTRACTS } from '@/config/contracts';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import {
+  toastTxPending,
+  toastTxSuccess,
+  toastTxError,
+  toastUserRejected,
+  isUserRejection,
+} from '@/lib/toast-utils';
 
 interface BidDialogProps {
   open: boolean;
@@ -25,97 +32,69 @@ interface BidDialogProps {
 
 export function BidDialog({ open, onOpenChange }: BidDialogProps) {
   const { address } = useAccount();
-  const { submitBid, isPending, isConfirming, isConfirmed, hash } = useAuction();
-  const { toast } = useToast();
+  const { submitBid, isPending, isConfirming, isConfirmed, hash, error } = useAuction();
   const [bidAmount, setBidAmount] = useState('');
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [submittedBidAmount, setSubmittedBidAmount] = useState('');
+  const prevHashRef = useRef<`0x${string}` | undefined>();
+
+  // Monitor transaction hash for pending notification
+  useEffect(() => {
+    if (hash && hash !== prevHashRef.current && submittedBidAmount) {
+      prevHashRef.current = hash;
+      toastTxPending(hash, `Submitting bid of ${submittedBidAmount} ETH...`);
+    }
+  }, [hash, submittedBidAmount]);
 
   // Monitor transaction confirmation
   useEffect(() => {
     if (isConfirmed && hash && submittedBidAmount) {
       console.log('[Bid] Transaction confirmed:', hash);
-
-      const explorerUrl = `https://sepolia.etherscan.io/tx/${hash}`;
-
-      toast({
-        title: '✅ Bid submitted successfully!',
-        description: (
-          <div className="space-y-2">
-            <p>Your encrypted bid of {submittedBidAmount} ETH has been confirmed on-chain.</p>
-            <a
-              href={explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline text-sm font-medium flex items-center gap-1"
-            >
-              View on Etherscan →
-            </a>
-          </div>
-        ),
-        duration: 10000, // Show for 10 seconds
-      });
+      toastTxSuccess(hash, `Bid of ${submittedBidAmount} ETH confirmed!`);
 
       // Reset form and close dialog
       setBidAmount('');
       setSubmittedBidAmount('');
+      prevHashRef.current = undefined;
       onOpenChange(false);
     }
-  }, [isConfirmed, hash, submittedBidAmount, toast, onOpenChange]);
+  }, [isConfirmed, hash, submittedBidAmount, onOpenChange]);
 
-  // Show transaction pending notification
+  // Monitor transaction errors
   useEffect(() => {
-    if (hash && isPending) {
-      console.log('[Bid] Transaction pending:', hash);
-
-      const explorerUrl = `https://sepolia.etherscan.io/tx/${hash}`;
-
-      toast({
-        title: '⏳ Transaction pending...',
-        description: (
-          <div className="space-y-2">
-            <p>Your bid transaction is being confirmed.</p>
-            <a
-              href={explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline text-sm font-medium flex items-center gap-1"
-            >
-              View on Etherscan →
-            </a>
-          </div>
-        ),
-        duration: 5000,
-      });
+    if (error) {
+      if (isUserRejection(error)) {
+        toastUserRejected();
+      } else {
+        toastTxError(hash, error);
+      }
+      setIsEncrypting(false);
+      setSubmittedBidAmount('');
     }
-  }, [hash, isPending, toast]);
+  }, [error, hash]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (!address) {
-      toast({
-        title: 'Wallet not connected',
+      toast.error('Wallet not connected', {
         description: 'Please connect your wallet to submit a bid',
-        variant: 'destructive',
       });
       return;
     }
 
     if (!bidAmount || Number(bidAmount) <= 0) {
-      toast({
-        title: 'Invalid bid amount',
+      toast.error('Invalid bid amount', {
         description: 'Please enter a valid bid amount',
-        variant: 'destructive',
       });
       return;
     }
 
     try {
       setIsEncrypting(true);
-      toast({
-        title: 'Encrypting bid...',
+      toast.loading('Encrypting bid...', {
+        id: 'encrypting',
         description: 'Please wait while we encrypt your bid using FHE',
       });
 
@@ -140,9 +119,10 @@ export function BidDialog({ open, onOpenChange }: BidDialogProps) {
       console.log('[Bid] Encryption complete:', { handle, proof });
       setIsEncrypting(false);
 
-      toast({
-        title: 'Encryption complete',
+      toast.success('Encryption complete', {
+        id: 'encrypting',
         description: 'Submitting your encrypted bid to the blockchain...',
+        duration: 2000,
       });
 
       console.log('[Bid] Calling submitBid...');
@@ -155,14 +135,21 @@ export function BidDialog({ open, onOpenChange }: BidDialogProps) {
 
       // Note: Don't show success toast here, we'll show it when transaction is confirmed
       console.log('[Bid] Transaction submitted, waiting for confirmation...');
-    } catch (error) {
-      console.error('[Bid] Submission failed:', error);
+    } catch (err) {
+      console.error('[Bid] Submission failed:', err);
       setIsEncrypting(false);
-      toast({
-        title: 'Bid submission failed',
-        description: error instanceof Error ? error.message : 'Unknown error occurred',
-        variant: 'destructive',
-      });
+      setSubmittedBidAmount('');
+      toast.dismiss('encrypting');
+
+      if (err instanceof Error) {
+        if (isUserRejection(err)) {
+          toastUserRejected();
+        } else {
+          toast.error('Bid submission failed', {
+            description: err.message || 'Unknown error occurred',
+          });
+        }
+      }
     }
   };
 

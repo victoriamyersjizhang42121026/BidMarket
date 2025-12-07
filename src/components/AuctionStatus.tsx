@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,13 @@ import {
 import { useAuction } from '@/hooks/useAuction';
 import { BidDialog } from './BidDialog';
 import { formatEther } from 'viem';
+import {
+  toastTxPending,
+  toastTxSuccess,
+  toastTxError,
+  toastUserRejected,
+  isUserRejection,
+} from '@/lib/toast-utils';
 
 export function AuctionStatus() {
   const { address } = useAccount();
@@ -36,10 +43,38 @@ export function AuctionStatus() {
     endAuction,
     isPending,
     isConfirming,
+    isConfirmed,
+    hash,
+    error,
   } = useAuction();
 
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const prevHashRef = useRef<`0x${string}` | undefined>();
+
+  // Monitor endAuction transaction state
+  useEffect(() => {
+    if (hash && hash !== prevHashRef.current) {
+      prevHashRef.current = hash;
+      toastTxPending(hash, "Ending auction...");
+    }
+  }, [hash]);
+
+  useEffect(() => {
+    if (isConfirmed && hash) {
+      toastTxSuccess(hash, "Auction ended successfully!");
+    }
+  }, [isConfirmed, hash]);
+
+  useEffect(() => {
+    if (error) {
+      if (isUserRejection(error)) {
+        toastUserRejected();
+      } else {
+        toastTxError(hash, error);
+      }
+    }
+  }, [error, hash]);
 
   const isSeller = address && seller && address.toLowerCase() === seller.toLowerCase();
   const canBid = !ended && biddingEnd && Date.now() / 1000 < biddingEnd;
