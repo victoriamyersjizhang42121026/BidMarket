@@ -44,6 +44,16 @@ const Header = () => {
             >
               How It Works
             </Link>
+            <Link
+              to="/my-bids"
+              className={`transition-colors ${
+                location.pathname === '/my-bids'
+                  ? 'text-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              My Bids
+            </Link>
           </nav>
 
           <ConnectButton />
