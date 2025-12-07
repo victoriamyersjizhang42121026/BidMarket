@@ -1,5 +1,6 @@
 require("dotenv").config();
-require("@nomicfoundation/hardhat-ethers");
+require("@nomicfoundation/hardhat-toolbox");
+require("@fhevm/hardhat-plugin");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {

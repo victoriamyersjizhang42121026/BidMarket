@@ -2,13 +2,13 @@
 pragma solidity ^0.8.24;
 
 import { FHE, ebool, euint64, externalEuint64 } from "@fhevm/solidity/lib/FHE.sol";
-import { SepoliaConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
+import { ZamaEthereumConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 
-/// @title ShieldedAuction – Confidential sealed-bid auction leveraging Zama's fhEVM
+/// @title ShieldedAuction – Confidential sealed-bid auction leveraging Zama's fhEVM 0.9.1
 /// @notice Bidders submit encrypted amounts; the contract tracks the maximum entirely in ciphertext.
-///         When the seller ends the auction, the encrypted winner index and bid are decrypted
-///         asynchronously via the fhEVM gateway, revealing only the winning pair.
-contract ShieldedAuction is SepoliaConfig {
+///         When the seller ends the auction, the encrypted values are marked for public decryption.
+///         Decryption is performed off-chain using the relayer SDK.
+contract ShieldedAuction is ZamaEthereumConfig {
     address public immutable seller;
     uint256 public immutable biddingEnd;
 
@@ -18,8 +18,7 @@ contract ShieldedAuction is SepoliaConfig {
     string public itemImageUrl;
 
     bool public ended;
-    bool public revealPending;
-    bool public revealFinalized;
+    bool public revealReady;
 
     mapping(address => euint64) private _bids;
     mapping(address => bool) private _hasBid;
@@ -28,7 +27,7 @@ contract ShieldedAuction is SepoliaConfig {
     euint64 private _highestBid;
     euint64 private _winnerIndexEnc; // 1-based index of the winning bidder (0 => none)
 
-    uint256 public revealRequestId;
+    // Revealed values (set off-chain after decryption)
     address public highestBidder;
     uint64 public highestBidPlain;
     uint64 public winnerIndexPlain;
@@ -37,15 +36,13 @@ contract ShieldedAuction is SepoliaConfig {
     error AuctionAlreadyEnded();
     error AlreadyBid();
     error Unauthorized();
-    error RevealInProgress();
-    error RevealNotPending();
     error RevealNotReady();
-    error InvalidReveal();
     error WinnerIndexOutOfBounds();
 
     event BidSubmitted(address indexed bidder);
-    event AuctionClosed(uint256 revealRequestId);
+    event AuctionClosed();
     event WinnerRevealed(address indexed bidder, uint64 amount);
+    event DecryptionReady(bytes32 highestBidHandle, bytes32 winnerIndexHandle);
 
     constructor(
         uint256 biddingTime,
@@ -94,66 +91,62 @@ contract ShieldedAuction is SepoliaConfig {
         emit BidSubmitted(msg.sender);
     }
 
-    /// @notice Ends the auction and requests a reveal of the winning bid + bidder index.
+    /// @notice Ends the auction and marks encrypted values for public decryption.
     /// @dev Callable by the seller once the bidding window has closed.
-    function endAuction() external returns (uint256 requestId) {
+    ///      In v0.9.1, decryption is performed off-chain using the relayer SDK.
+    function endAuction() external {
         if (msg.sender != seller) revert Unauthorized();
         if (block.timestamp < biddingEnd) revert AuctionStillActive();
         if (ended) revert AuctionAlreadyEnded();
-        if (revealPending) revert RevealInProgress();
 
         ended = true;
 
         if (_bidders.length == 0) {
-            revealFinalized = true;
+            revealReady = true;
             highestBidder = address(0);
             highestBidPlain = 0;
             winnerIndexPlain = 0;
-            FHE.allow(_highestBid, seller);
-            emit AuctionClosed(0);
+            emit AuctionClosed();
             emit WinnerRevealed(address(0), 0);
-            return 0;
+            return;
         }
 
-        bytes32[] memory cts = new bytes32[](2);
-        cts[0] = FHE.toBytes32(_highestBid);
-        cts[1] = FHE.toBytes32(_winnerIndexEnc);
+        // Mark encrypted values as publicly decryptable for off-chain decryption
+        FHE.makePubliclyDecryptable(_highestBid);
+        FHE.makePubliclyDecryptable(_winnerIndexEnc);
 
-        requestId = FHE.requestDecryption(cts, this.finalizeReveal.selector);
-        revealPending = true;
-        revealRequestId = requestId;
+        // Allow seller to access the encrypted values
+        FHE.allow(_highestBid, seller);
+        FHE.allow(_winnerIndexEnc, seller);
 
-        emit AuctionClosed(requestId);
+        emit AuctionClosed();
+        emit DecryptionReady(
+            FHE.toBytes32(_highestBid),
+            FHE.toBytes32(_winnerIndexEnc)
+        );
     }
 
-    /// @notice Callback invoked by the fhEVM gateway once the winning pair is decrypted.
-    function finalizeReveal(
-        uint256 requestId,
-        bytes memory cleartexts,
-        bytes memory decryptionProof
-    ) external {
-        if (!revealPending) revert RevealNotPending();
-        if (requestId != revealRequestId) revert InvalidReveal();
+    /// @notice Finalize the reveal with decrypted values (called by seller after off-chain decryption)
+    /// @param _highestBidValue The decrypted highest bid value
+    /// @param _winnerIndexValue The decrypted winner index value
+    function finalizeReveal(uint64 _highestBidValue, uint64 _winnerIndexValue) external {
+        if (msg.sender != seller) revert Unauthorized();
+        if (!ended) revert AuctionStillActive();
+        if (revealReady) revert RevealNotReady();
 
-        FHE.checkSignatures(requestId, cleartexts, decryptionProof);
-        (uint64 highestBidValue, uint64 winnerIndexValue) = abi.decode(cleartexts, (uint64, uint64));
+        highestBidPlain = _highestBidValue;
+        winnerIndexPlain = _winnerIndexValue;
+        revealReady = true;
 
-        revealPending = false;
-        revealFinalized = true;
-        revealRequestId = 0;
-        highestBidPlain = highestBidValue;
-        winnerIndexPlain = winnerIndexValue;
-
-        if (winnerIndexValue == 0) {
+        if (_winnerIndexValue == 0) {
             highestBidder = address(0);
         } else {
-            if (winnerIndexValue > _bidders.length) revert WinnerIndexOutOfBounds();
-            highestBidder = _bidders[winnerIndexValue - 1];
+            if (_winnerIndexValue > _bidders.length) revert WinnerIndexOutOfBounds();
+            highestBidder = _bidders[_winnerIndexValue - 1];
             FHE.allow(_highestBid, highestBidder);
         }
 
-        FHE.allow(_highestBid, seller);
-        emit WinnerRevealed(highestBidder, highestBidValue);
+        emit WinnerRevealed(highestBidder, _highestBidValue);
     }
 
     /// @notice Returns the encrypted bid submitted by `bidder`.
@@ -161,21 +154,51 @@ contract ShieldedAuction is SepoliaConfig {
         return _bids[bidder];
     }
 
-    /// @notice Returns the encrypted highest bid tracked on-chain.
-    /// @dev Accessible after the auction is ended to avoid leaking activity mid-auction.
-    function getHighestBidCiphertext() external view returns (euint64) {
+    /// @notice Returns the encrypted highest bid handle for off-chain decryption.
+    /// @dev Accessible after the auction is ended.
+    function getHighestBidHandle() external view returns (bytes32) {
         if (!ended) revert AuctionStillActive();
-        return _highestBid;
+        return FHE.toBytes32(_highestBid);
+    }
+
+    /// @notice Returns the encrypted winner index handle for off-chain decryption.
+    /// @dev Accessible after the auction is ended.
+    function getWinnerIndexHandle() external view returns (bytes32) {
+        if (!ended) revert AuctionStillActive();
+        return FHE.toBytes32(_winnerIndexEnc);
     }
 
     /// @notice Returns the current winner information (only once the reveal is finalized).
-    function getWinner() external view returns (address winner, uint64 bid) {
-        if (!revealFinalized) revert RevealNotReady();
+    function getWinner() external view returns (address winner, uint64 bidAmount) {
+        if (!revealReady) revert RevealNotReady();
         return (highestBidder, highestBidPlain);
     }
 
     /// @notice Returns the number of bidders.
     function bidderCount() external view returns (uint256) {
         return _bidders.length;
+    }
+
+    /// @notice Returns all bidder addresses.
+    function getBidders() external view returns (address[] memory) {
+        return _bidders;
+    }
+
+    /// @notice Check if a specific address has bid.
+    function hasBid(address bidder) external view returns (bool) {
+        return _hasBid[bidder];
+    }
+
+    /// @notice Returns auction status.
+    function getAuctionStatus() external view returns (
+        bool isEnded,
+        bool isRevealReady,
+        uint256 totalBidders,
+        uint256 timeRemaining
+    ) {
+        isEnded = ended;
+        isRevealReady = revealReady;
+        totalBidders = _bidders.length;
+        timeRemaining = block.timestamp >= biddingEnd ? 0 : biddingEnd - block.timestamp;
     }
 }
