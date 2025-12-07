@@ -3,13 +3,13 @@
 <div align="center">
 
 ![ShieldedAuction Banner](https://img.shields.io/badge/ShieldedAuction-Privacy--First_Auctions-blue?style=for-the-badge)
-[![Zama fhEVM](https://img.shields.io/badge/Zama-fhEVM%200.8.0-purple?style=for-the-badge)](https://docs.zama.ai/fhevm)
+[![Zama fhEVM](https://img.shields.io/badge/Zama-fhEVM%200.9.1-purple?style=for-the-badge)](https://docs.zama.ai/fhevm)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636?style=for-the-badge&logo=solidity)](https://soliditylang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 **The world's first privacy-preserving sealed-bid auction platform powered by Fully Homomorphic Encryption**
 
-[Live Demo](https://bidmarket-75smz1lnn-songsus-projects.vercel.app) • [Documentation](#documentation) • [Architecture](#architecture)
+[Live Demo](https://bidmarket-bcbf7g1wm-songsus-projects.vercel.app) • [Documentation](#documentation) • [Architecture](#architecture)
 
 </div>
 
@@ -146,8 +146,7 @@ ShieldedAuction Contract
 │   ├── _bidders: address[]          // Bidder list
 │   ├── _highestBid: euint64         // Encrypted max bid
 │   ├── _winnerIndexEnc: euint64     // Encrypted winner index
-│   ├── revealPending: bool          // Decryption in progress
-│   ├── revealFinalized: bool        // Winner revealed
+│   ├── revealReady: bool            // Winner revealed (fhEVM 0.9.1)
 │   ├── highestBidder: address       // Winner address (after reveal)
 │   └── highestBidPlain: uint64      // Winning amount (after reveal)
 │
@@ -196,27 +195,30 @@ User Submits Bid
                                                                                         [Encrypted]
                                                                                         on-chain
 
-──────────────────────── AFTER AUCTION ENDS ────────────────────────────────────────
+──────────────────────── AFTER AUCTION ENDS (fhEVM 0.9.1) ─────────────────────────
 
 Seller Ends Auction
       │
       ├──────────▶ endAuction()
                         │
-                        ├──────────▶ Gateway Request
-                                    Decrypt [highestBid, winnerIndex]
+                        ├──────────▶ FHE.makePubliclyDecryptable()
+                                    Mark [highestBid, winnerIndex]
                                           │
-                                          ├──────────▶ Gateway Processing
-                                                      (Asynchronous)
+                                          ├──────────▶ emit DecryptionReady
+                                                      (handles for off-chain)
                                                             │
-                                                            ├──────▶ finalizeReveal()
-                                                                    Callback
+                                                            ├──────▶ Off-chain Decryption
+                                                                    (Relayer SDK)
                                                                          │
-                                                                         ├──────▶ Store Winner
-                                                                                 highestBidder
-                                                                                 highestBidPlain
+                                                                         ├──────▶ finalizeReveal()
+                                                                                 (Submit decrypted values)
                                                                                    │
-                                                                                   ▼
-                                                                              Winner Revealed!
+                                                                                   ├──────▶ Store Winner
+                                                                                           highestBidder
+                                                                                           highestBidPlain
+                                                                                             │
+                                                                                             ▼
+                                                                                        Winner Revealed!
 ```
 
 ### Technology Stack
@@ -226,14 +228,19 @@ Seller Ends Auction
 | Component | Version | Purpose |
 |-----------|---------|---------|
 | **Solidity** | 0.8.24 | Smart contract language |
-| **Zama fhEVM** | 0.8.0 | FHE-enabled Ethereum Virtual Machine |
-| **Hardhat** | Latest | Development environment |
-| **Gateway** | Zama FHE Gateway | Asynchronous decryption service |
+| **Zama fhEVM** | 0.9.1 | FHE-enabled Ethereum Virtual Machine |
+| **Hardhat** | 2.22.x | Development environment |
+| **fhevm-hardhat-plugin** | 0.3.0-1 | FHE development plugin |
 
 **FHE Types Used:**
 - `euint64` - Encrypted 64-bit unsigned integer for bid amounts
 - `externalEuint64` - External encrypted type for user inputs
 - `ebool` - Encrypted boolean for comparisons
+
+**fhEVM 0.9.1 Features:**
+- `ZamaEthereumConfig` - Network configuration base contract
+- `FHE.makePubliclyDecryptable()` - Mark values for off-chain decryption
+- Off-chain decryption via Relayer SDK (replaces Gateway callbacks)
 
 #### Frontend Layer
 
@@ -243,8 +250,8 @@ Seller Ends Auction
 | **TypeScript** | 5.x | Type safety |
 | **Vite** | 5.x | Build tool & dev server |
 | **Wagmi** | 2.x | Web3 React hooks |
-| **RainbowKit** | 0.12.x | Wallet connection UI |
-| **Zama Relayer SDK** | 0.2.0 | FHE encryption client |
+| **RainbowKit** | 2.x | Wallet connection UI |
+| **Zama Relayer SDK** | 0.3.0-5 | FHE encryption client (CDN) |
 | **shadcn/ui** | Latest | UI component library |
 | **Tailwind CSS** | 3.x | Styling framework |
 | **Viem** | 2.x | Ethereum interactions |
@@ -296,7 +303,7 @@ cp .env.example .env
 
 2. **Edit `.env`**:
 ```env
-VITE_CONTRACT_ADDRESS=0xYourContractAddress
+VITE_CONTRACT_ADDRESS=0x539Cc55558578efE9b590DBb7e2e603e6352f5B8
 VITE_CHAIN_ID=11155111
 ```
 
@@ -379,60 +386,56 @@ _winnerIndexEnc = FHE.select(isGreater, newIndex, _winnerIndexEnc);
 - `FHE.select()` - Choose between encrypted values based on encrypted boolean
 - All operations preserve encryption
 
-### 4️⃣ **Auction End** (Seller)
+### 4️⃣ **Auction End** (Seller) - fhEVM 0.9.1
 
 After the bidding deadline, seller ends the auction:
 
 ```solidity
 function endAuction() external {
-    require(msg.sender == seller, "Only seller");
-    require(block.timestamp >= biddingEnd, "Bidding not ended");
-    require(!ended, "Already ended");
+    if (msg.sender != seller) revert Unauthorized();
+    if (block.timestamp < biddingEnd) revert AuctionStillActive();
+    if (ended) revert AuctionAlreadyEnded();
 
     ended = true;
 
-    if (bidderCount() > 0) {
-        // Request decryption via gateway
-        uint256[] memory ciphertexts = new uint256[](2);
-        ciphertexts[0] = FHE.unwrap(_highestBid);
-        ciphertexts[1] = FHE.unwrap(_winnerIndexEnc);
+    if (bidderCount > 0) {
+        // Mark values for public decryption (fhEVM 0.9.1)
+        FHE.makePubliclyDecryptable(_highestBid);
+        FHE.makePubliclyDecryptable(_winnerIndexEnc);
 
-        gatewayContract.requestDecryption(
-            ciphertexts,
-            this.finalizeReveal.selector,
-            ...
+        // Emit handles for off-chain decryption
+        emit DecryptionReady(
+            FHE.toBytes32(_highestBid),
+            FHE.toBytes32(_winnerIndexEnc)
         );
-
-        revealPending = true;
     }
 
-    emit AuctionClosed(block.timestamp);
+    emit AuctionClosed();
 }
 ```
 
-### 5️⃣ **Winner Reveal** (Gateway Callback)
+### 5️⃣ **Winner Reveal** (Off-chain Decryption)
 
-The FHE gateway asynchronously decrypts and calls back:
+The seller uses Relayer SDK to decrypt off-chain, then submits results:
 
 ```solidity
 function finalizeReveal(
-    uint256 /*requestID*/,
-    uint64 highestBidDecrypted,
-    uint64 winnerIndexDecrypted
-) public onlyGateway {
-    require(revealPending, "No reveal pending");
+    uint64 _highestBidValue,
+    uint64 _winnerIndexValue
+) external {
+    if (msg.sender != seller) revert Unauthorized();
+    if (!ended) revert AuctionStillActive();
+    if (revealReady) revert AuctionAlreadyEnded();
+    if (_winnerIndexValue < 1 || _winnerIndexValue > bidderCount) {
+        revert WinnerIndexOutOfBounds();
+    }
 
     // Store plaintext results
-    highestBidPlain = highestBidDecrypted;
-    uint256 winnerIdx = winnerIndexDecrypted - 1;
+    highestBidPlain = _highestBidValue;
+    uint256 winnerIdx = _winnerIndexValue - 1;
     highestBidder = _bidders[winnerIdx];
 
-    // Grant decryption access
-    FHE.allow(_highestBid, seller);
-    FHE.allow(_highestBid, highestBidder);
-
-    revealFinalized = true;
-    revealPending = false;
+    revealReady = true;
 
     emit WinnerRevealed(highestBidder, highestBidPlain);
 }
@@ -442,7 +445,7 @@ function finalizeReveal(
 - Winner address revealed
 - Winning bid amount revealed
 - All losing bids remain permanently encrypted
-- Winner and seller can verify the encrypted bid
+- Transparent and verifiable on-chain
 
 ---
 
@@ -502,13 +505,13 @@ require(block.timestamp >= biddingEnd, "Bidding not ended");
 - [x] **Smart Contract Development**
   - ShieldedAuction contract with FHE integration
   - Homomorphic bid comparison
-  - Gateway-based winner reveal
+  - Off-chain decryption via Relayer SDK (fhEVM 0.9.1)
   - Deployed on Sepolia testnet
 
 - [x] **Frontend Application**
   - Complete React application
-  - Wallet integration (MetaMask, OKX, Coinbase)
-  - FHE encryption in browser
+  - Wallet integration (MetaMask, OKX, Coinbase, WalletConnect)
+  - FHE encryption in browser (Zama SDK 0.3.0-5)
   - Real-time auction monitoring
 
 - [x] **User Features**
@@ -516,6 +519,13 @@ require(block.timestamp >= biddingEnd, "Bidding not ended");
   - Transaction confirmation with Etherscan links
   - Winner reveal display
   - Auction status tracking
+  - **My Bids page** - Track personal bid history and status
+
+- [x] **fhEVM 0.9.1 Migration**
+  - Updated to `ZamaEthereumConfig` base contract
+  - Replaced `FHE.requestDecryption` with `FHE.makePubliclyDecryptable`
+  - Added `finalizeReveal` for off-chain decryption workflow
+  - Updated frontend SDK to CDN 0.3.0-5
 
 ### Phase 2: Enhanced Features 🚧 **IN PROGRESS** (Q1 2026)
 
@@ -531,11 +541,10 @@ require(block.timestamp >= biddingEnd, "Bidding not ended");
   - Automatic winner transfer
   - Collection verification
 
-- [ ] **Bid History & Analytics**
-  - Personal auction history
-  - Encrypted bid tracking
+- [ ] **Enhanced Bid Analytics**
   - Participation statistics
-  - Winner history
+  - Winner history dashboard
+  - Auction performance metrics
 
 - [ ] **Reserve Price Feature**
   - Encrypted reserve price
@@ -736,7 +745,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support & Community
 
-- **Live Demo**: [https://bidmarket-75smz1lnn-songsus-projects.vercel.app](https://bidmarket-75smz1lnn-songsus-projects.vercel.app)
+- **Live Demo**: [https://bidmarket-bcbf7g1wm-songsus-projects.vercel.app](https://bidmarket-bcbf7g1wm-songsus-projects.vercel.app)
 - **Documentation**: [Zama Docs](https://docs.zama.ai/fhevm)
 - **Discord**: [Zama Discord](https://discord.gg/zama)
 - **Twitter**: [@ZamaFHE](https://twitter.com/zamafhe)
@@ -745,7 +754,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🔗 Links
 
-- **Contract**: [View on Sepolia Etherscan](https://sepolia.etherscan.io/address/YOUR_CONTRACT_ADDRESS)
+- **Contract**: [View on Sepolia Etherscan](https://sepolia.etherscan.io/address/0x539Cc55558578efE9b590DBb7e2e603e6352f5B8)
 - **Zama fhEVM**: [https://docs.zama.ai/fhevm](https://docs.zama.ai/fhevm)
 - **Relayer SDK**: [https://github.com/zama-ai/fhevm-relayer-sdk](https://github.com/zama-ai/fhevm-relayer-sdk)
 
@@ -755,6 +764,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Built with ❤️ using Zama FHE Technology**
 
-[Website](https://bidmarket-75smz1lnn-songsus-projects.vercel.app) • [GitHub](https://github.com/yourusername/BidMarket) • [Docs](https://docs.zama.ai)
+[Website](https://bidmarket-bcbf7g1wm-songsus-projects.vercel.app) • [GitHub](https://github.com/yourusername/BidMarket) • [Docs](https://docs.zama.ai)
 
 </div>
