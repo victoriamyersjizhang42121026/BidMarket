@@ -25,16 +25,10 @@ export function useAuction() {
     functionName: 'ended',
   });
 
-  const { data: revealPending } = useReadContract({
+  const { data: revealReady } = useReadContract({
     address: CONTRACTS.ShieldedAuction,
     abi: ABIS.ShieldedAuction,
-    functionName: 'revealPending',
-  });
-
-  const { data: revealFinalized } = useReadContract({
-    address: CONTRACTS.ShieldedAuction,
-    abi: ABIS.ShieldedAuction,
-    functionName: 'revealFinalized',
+    functionName: 'revealReady',
   });
 
   const { data: bidderCount } = useReadContract({
@@ -48,7 +42,7 @@ export function useAuction() {
     abi: ABIS.ShieldedAuction,
     functionName: 'getWinner',
     query: {
-      enabled: revealFinalized === true,
+      enabled: revealReady === true,
     },
   });
 
@@ -95,8 +89,10 @@ export function useAuction() {
     seller,
     biddingEnd: biddingEnd ? Number(biddingEnd) : undefined,
     ended,
-    revealPending,
-    revealFinalized,
+    revealReady,
+    // For backward compatibility with UI components
+    revealPending: ended && !revealReady,
+    revealFinalized: revealReady,
     bidderCount: bidderCount ? Number(bidderCount) : 0,
     winner: winner as [string, bigint] | undefined,
 

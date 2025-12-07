@@ -42,36 +42,6 @@
   },
   {
     "inputs": [],
-    "name": "HandlesAlreadySavedForRequestID",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidKMSSignatures",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidReveal",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "NoHandleFoundForRequestID",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "RevealInProgress",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "RevealNotPending",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "RevealNotReady",
     "type": "error"
   },
@@ -86,15 +56,13 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "ZamaProtocolUnsupported",
+    "type": "error"
+  },
+  {
     "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "revealRequestId",
-        "type": "uint256"
-      }
-    ],
+    "inputs": [],
     "name": "AuctionClosed",
     "type": "event"
   },
@@ -115,13 +83,19 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "requestID",
-        "type": "uint256"
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "highestBidHandle",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "winnerIndexHandle",
+        "type": "bytes32"
       }
     ],
-    "name": "DecryptionFulfilled",
+    "name": "DecryptionReady",
     "type": "event"
   },
   {
@@ -189,14 +163,21 @@
   },
   {
     "inputs": [],
-    "name": "endAuction",
+    "name": "confidentialProtocolId",
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "requestId",
+        "name": "",
         "type": "uint256"
       }
     ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "endAuction",
+    "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -216,24 +197,60 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "requestId",
-        "type": "uint256"
+        "internalType": "uint64",
+        "name": "_highestBidValue",
+        "type": "uint64"
       },
       {
-        "internalType": "bytes",
-        "name": "cleartexts",
-        "type": "bytes"
-      },
-      {
-        "internalType": "bytes",
-        "name": "decryptionProof",
-        "type": "bytes"
+        "internalType": "uint64",
+        "name": "_winnerIndexValue",
+        "type": "uint64"
       }
     ],
     "name": "finalizeReveal",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getAuctionStatus",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "isEnded",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isRevealReady",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalBidders",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timeRemaining",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getBidders",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -257,10 +274,10 @@
   },
   {
     "inputs": [],
-    "name": "getHighestBidCiphertext",
+    "name": "getHighestBidHandle",
     "outputs": [
       {
-        "internalType": "euint64",
+        "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
       }
@@ -279,8 +296,40 @@
       },
       {
         "internalType": "uint64",
-        "name": "bid",
+        "name": "bidAmount",
         "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getWinnerIndexHandle",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "bidder",
+        "type": "address"
+      }
+    ],
+    "name": "hasBid",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -353,51 +402,12 @@
   },
   {
     "inputs": [],
-    "name": "protocolId",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "pure",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "revealFinalized",
+    "name": "revealReady",
     "outputs": [
       {
         "internalType": "bool",
         "name": "",
         "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "revealPending",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "revealRequestId",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
